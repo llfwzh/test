@@ -1,0 +1,319 @@
+1.LU分解
+A = [1.0 1 1;
+     2   4 8;
+     1   4 9]
+L,U = lu(A, NoPivot())
+@test A ≈ L*U
+
+# 利用 LU 解方程组
+b = randn(3)
+c = L \ b
+x = U \ c
+@test A \ b ≈ x
+
+2.小主元不稳定
+A[1,1] = 1E-14
+L,U = lu(A, NoPivot())
+err = norm(A \ b - U \ (L \ b))  # 误差很大
+
+  #误差曲线绘制
+A = [1.0 1 1; 2 4 8; 1 4 9]
+b = [1,2,3]
+errs = zeros(15)
+for k = 1:15
+    A[1,1] = 10.0^(1-k)
+    L,U = lu(A, NoPivot())
+    errs[k] = norm(A\b - U \ (L \ b))
+end
+# scatter(0:14, errs; yscale=:log10)  # 误差指数增长
+ 
+3.PLU分解
+A = [0.1 1 1;
+     2   4 8;
+     1   4 9]
+L,U,σ = lu(A)          # σ 为置换向量
+b = [10,11,12]
+b̃ = b[σ]               # 应用置换
+x = U \ (L \ b̃)
+@test x == A \ b
+
+4.PLU也不行
+function badmatrix(n)
+    A = zeros(Int, n, n)
+    for k = 1:n
+        A[k,n] = 1
+    end
+    for j = 1:n-1
+        A[j,j] = 1
+        for k = j+1:n
+            A[k,j] = -1
+        end
+    end
+    return A
+end
+
+# 无扰动时不选主元
+@test lu(badmatrix(5)).p == 1:5
+
+# 微小扰动触发选主元
+@test lu(badmatrix(5) + eps()*randn(5,5)).p != 1:5
+
+# 误差对比
+baderrs = zeros(4)
+perterrs = zeros(4)
+for k = 1:4
+    n = 25k
+    b = randn(n)
+    A = badmatrix(n)
+    Ã = A + 1E-15*randn(n,n)
+    baderrs[k] = norm(A * (A \ b) - b)
+    perterrs[k] = norm(Ã * (Ã \ b) - b)
+end
+# plot(25:25:100, [baderrs perterrs]; yscale=:log10, labels=["bad" "perturbed"])
+# 扰动后误差保持很小，坏矩阵本身误差爆炸
+
+
+5.cholesky分解
+#先检验是不是可以这样分解的，也就是正定性
+function mycholesky(A)
+    T = eltype(A)
+    m,n = size(A)
+    n == m || error("矩阵必须为方阵")
+    A ≈ A' || error("矩阵必须对称")
+    L = LowerTriangular(zeros(T,n,n))
+    Aⱼ = copy(A)
+    for j = 1:n
+        α,𝐯 = Aⱼ[1,1], Aⱼ[2:end,1]
+        α ≤ 0 && error("矩阵不是正定的")
+        L[j,j] = sqrt(α)
+        L[j+1:end,j] = 𝐯 / sqrt(α)
+        Aⱼ = Aⱼ[2:end,2:end] - 𝐯*𝐯' / α
+    end
+    return L
+end
+
+A = Symmetric(rand(100,100) + 100I)
+L = mycholesky(A)
+@test A ≈ L*L'
+
+# 内置版本
+L̃ = cholesky(A).L
+@test L̃ ≈ L
+
+#分解
+function mycholesky(A::SymTridiagonal)
+    d = A.dv
+    u = A.ev
+    T = float(eltype(A))
+    n = length(d)
+    ld = zeros(T, n)
+    ll = zeros(T, n-1)
+    ld[1] = sqrt(d[1])
+    for k = 1:n-1
+        ll[k] = u[k] / ld[k]
+        ld[k+1] = sqrt(d[k+1] - ll[k]^2)
+    end
+    return Bidiagonal(ld, ll, :L)
+end
+
+n = 1000
+A = SymTridiagonal(2*ones(n), -ones(n-1))
+L = mycholesky(A)
+@test L isa Bidiagonal
+@test L*L' ≈ A
+
+6.二维旋转矩阵，存储角度 θ
+  
+# 定义一个二维旋转矩阵类型，存储角度（弧度）
+struct Rotation <: AbstractMatrix{Float64}
+    θ::Float64
+end
+
+import Base: *, size, getindex
+
+size(Q::Rotation) = (2, 2)
+
+# 实现旋转矩阵与向量的乘法（O(1) 时间）
+function *(Q::Rotation, x::AbstractVector)
+    length(x) == 2 || error("向量长度必须为 2")
+    c, s = cos(Q.θ), sin(Q.θ)
+    a, b = x
+    return [c*a - s*b, s*a + c*b]
+end
+
+# 获取矩阵元素 (k,j) —— 通过乘以标准基向量实现
+function getindex(Q::Rotation, k::Int, j::Int)
+    e_k = zeros(2); e_k[k] = 1
+    e_j = zeros(2); e_j[j] = 1
+    return (e_k' * (Q * e_j))[]  # 取出标量
+end
+
+# 示例：将向量旋转至 x 轴
+x = [-1.0, -2.0]
+θ = atan(x[2], x[1])          # 计算向量角度
+Q = Rotation(-θ)               # 旋转回 x 轴
+@test Q * x ≈ [norm(x), 0.0]
+
+7.多个旋转复合
+# 表示一系列反射的乘积，Q = Q_{v₁} Q_{v₂} … Q_{vₘ}
+struct Reflections{T} <: AbstractMatrix{T}
+    V::Matrix{T}          # 每一列是一个 Householder 向量（单位向量）
+end
+
+size(Q::Reflections) = (size(Q.V, 1), size(Q.V, 1))
+
+# 复合反射乘以向量：从最后一个反射开始依次应用
+function *(Q::Reflections, x::AbstractVector)
+    m, n = size(Q.V)
+    for j = n:-1:1
+        x = Reflection(Q.V[:, j]) * x
+    end
+    return x
+end
+
+# 获取元素 (k,j) —— 通过乘以单位向量 O(mn)
+function getindex(Q::Reflections, k::Int, j::Int)
+    m, n = size(Q)
+    eⱼ = zeros(eltype(Q.V), m)
+    eⱼ[j] = one(eltype(Q.V))
+    return (Q * eⱼ)[k]
+end
+
+# 伴随（即逆）也是 Reflections，但向量顺序颠倒
+function adjoint(Q::Reflections)
+    return Reflections(Q.V[:, end:-1:1])
+end
+
+# 测试
+Y = randn(5, 3)
+V = Y * Diagonal([1/norm(Y[:,j]) for j=1:3])   # 单位化每列
+Q = Reflections(V)
+@test Q ≈ (I - 2V[:,1]*V[:,1]') * (I - 2V[:,2]*V[:,2]') * (I - 2V[:,3]*V[:,3]')
+@test Q' isa Reflections
+@test Q' ≈ (I - 2V[:,3]*V[:,3]') * (I - 2V[:,2]*V[:,2]') * (I - 2V[:,1]*V[:,1]')
+@test Q'Q ≈ I
+
+8.Householder 反射实现 QR（高效版本，使用 Reflection 和 Reflections）
+"""
+    householderqr(A)
+
+返回 (Q, R)，其中 Q 是 Reflections 类型（存储 Householder 向量），R 是上三角矩阵（包括零行），满足 Q*R ≈ A。
+复杂度 O(mn²)。
+"""
+function householderqr(A)
+    T = eltype(A)
+    m, n = size(A)
+    n > m && error("列数不能超过行数")
+    R = zeros(T, m, n)                 # 最终 R 矩阵（包含零行）
+    Q = Reflections(zeros(T, m, n))    # Q.V 将存储 Householder 向量
+    Aⱼ = copy(A)                        # 当前待处理的子矩阵
+    for j = 1:n
+        𝐚₁ = Aⱼ[:, 1]                    # 当前第一列
+        Q₁ = householderreflection(𝐚₁[1] < 0, 𝐚₁)   # 构造 Householder 反射
+        Q₁Aⱼ = Q₁ * Aⱼ                    # 应用到当前子矩阵
+        α, 𝐰 = Q₁Aⱼ[1, 1], Q₁Aⱼ[1, 2:end]  # 第一行第一列和剩余行
+        R[j, j] = α
+        R[j, j+1:end] = 𝐰
+        Q.V[j:end, j] = Q₁.v              # 存储 Householder 向量（截断）
+        Aⱼ = Q₁Aⱼ[2:end, 2:end]           # 进入下一轮子矩阵
+    end
+    return Q, R
+end
+
+# 测试
+A = randn(600, 400)
+Q, R = householderqr(A)
+@test Q*R ≈ A
+
+9.Givens 旋转实现带状矩阵 QR（O(n) 时间）
+
+#首先需要定义 UpperTridiagonal 类型（带两条上对角线的上三角矩阵）
+# 自定义上三角矩阵，带宽 (0,2)
+struct UpperTridiagonal{T} <: AbstractMatrix{T}
+    d::Vector{T}   # 对角线
+    du::Vector{T}  # 第一次上对角线
+    du2::Vector{T} # 第二次上对角线
+end
+
+import Base: size, getindex, setindex!
+
+size(U::UpperTridiagonal) = (length(U.d), length(U.d))
+
+function getindex(U::UpperTridiagonal, k::Int, j::Int)
+    if j - k == 0
+        return U.d[k]
+    elseif j - k == 1
+        return U.du[k]
+    elseif j - k == 2
+        return U.du2[k]
+    else
+        return zero(eltype(U))
+    end
+end
+
+function setindex!(U::UpperTridiagonal, v, k::Int, j::Int)
+    if j > k+2 || j < k
+        error("无法修改带外元素")
+    end
+    if j - k == 0
+        U.d[k] = v
+    elseif j - k == 1
+        U.du[k] = v
+    elseif j - k == 2
+        U.du2[k] = v
+    end
+    return U
+end
+
+#现在实现带状 QR（针对三对角矩阵，利用 Givens 旋转）。
+"""
+    bandedqr(A::Tridiagonal)
+
+返回 (Q, R)，其中 Q 是 Rotations 类型（存储旋转角度），R 是 UpperTridiagonal，
+满足 Q*R ≈ A。复杂度 O(n)。
+"""
+function bandedqr(A::Tridiagonal)
+    n = size(A, 1)
+    Q = Rotations(zeros(n-1))                     # 存储 n-1 个旋转角度
+    R = UpperTridiagonal(zeros(n), zeros(n-1), zeros(n-2))
+    R[1, 1:2] = A[1, 1:2]                          # 初始化第一行
+    for j = 1:n-1
+        # 当前待消去的元素是 (j+1, j)
+        x_1 = [R[j, j], A[j+1, j]]                 # 两个元素构成向量
+        Q.θ[j] = atan(x_1[2], x_1[1])               # 计算旋转角度
+        Q_1 = Rotation(-Q.θ[j])                     # 旋转矩阵（逆方向）
+        R[j, j] = (Q_1 * x_1)[1]                    # 更新对角元
+        # 应用到第 j+1 列
+        x_2 = [R[j, j+1]; A[j+1, j+1]]
+        R[j:j+1, j+1] = Q_1 * x_2
+        # 应用到第 j+2 列（若存在）
+        if j < n-1
+            x_3 = [0.0, A[j+1, j+2]]
+            R[j:j+1, j+2] = Q_1 * x_3
+        end
+    end
+    return Q, R
+end
+
+# 测试
+A = Tridiagonal([1,2,3,4], [1,2,3,4,5], [1,2,3,4])
+Q, R = bandedqr(A)
+@test Q*R ≈ A
+
+10.QR 与最小二乘
+"""
+    leastsquares(A, b)
+
+返回最小二乘解 x 使得 ‖Ax - b‖₂ 最小，使用 Householder QR 分解。
+"""
+function leastsquares(A, b)
+    m, n = size(A)
+    Q, R = householderqr(A)
+    # 缩减 QR：取 R 的前 n 行，Q'b 的前 n 个元素
+    return UpperTriangular(R[1:n, 1:n]) \ (Q'b)[1:n]
+end
+
+# 与 Julia 内置 \ 对比
+A = randn(200, 100)
+b = randn(200)
+@test A\b ≈ leastsquares(A, b)
