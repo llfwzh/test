@@ -1,0 +1,376 @@
+I1
+typeof(5)   # 显示存储格式，一般来讲，整数都是有符号的64位
+Int64
+（基础概念，但为理解整数类型的基础）
+
+I2
+sizeof(Int64)   # 查看类型占用的字节数，返回 Int64 类型占用的字节数，8 字节 = 64 位
+8
+（基础概念）
+
+I4
+UInt8(5)       # 将整数 5 转换为 UInt8 类型，结果以十六进制显示
+0x05
+（基础操作）
+
+I5
+0b101          # 二进制字面量自动创建能容纳至少 3 位的最小无符号类型
+0x05
+（基础）
+
+I7
+UInt32(0b101101)   # 将二进制数显式转换为 UInt32 三十二位
+0x0000002d
+（类似操作见于 computerexam2223s.ipynb 问题1，使用 reinterpret 构造特定位的整数）
+
+I8
+typeof(0b111111111111111111111111111111111111111111111111111111111111111111111111111111111111)   # 超过 64 位但不超过 128 位时自动创建 UInt128
+UInt128
+（基础）
+
+I9
+typeof(0b111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111)   # 超过 128 位时自动创建 BigInt
+BigInt
+（基础）
+
+I10
+x = UInt8(17)
+y = UInt8(3)
+printbits(x + y)   # 无符号整数加法自动模 2^8，00010001 + 00000011 = 00010100，即 20。
+00010001 +
+00000011 =
+00010100
+（演示模运算，为理解整数溢出打基础，见于 computerexam2122s.ipynb 问题3.2 中矩阵乘法可能涉及的整数溢出）
+
+I11
+x = UInt8(255)
+y = UInt8(1)
+printbits(x + y)   # 溢出回绕，11111111 + 00000001 = 00000000（模 256 溢出）。
+11111111 +
+00000001 =
+00000000
+（同上）
+
+I15
+printbits(Int8(5))   # 打印 Int8(5) 的二进制位，5 的补码表示为 00000101
+0 0000101
+（基础）
+
+I16
+printbits(Int8(-5))  # 打印 Int8(-5) 的二进制位，-5 的补码表示为 11111011
+1 1111011
+（基础）
+
+I17
+reinterpret(Int8, 0b11111111)   # 将无符号位模式直接解释为有符号整数，0b11111111 作为 UInt8 是 255，重新解释为 Int8 得到 -1。
+-1
+（直接对应 computerexam2223s.ipynb 问题1，用 reinterpret 构造特定位的 Int8）
+
+I18
+reinterpret(Int8,0b11000001)   # 构造 Int8(-63) 的位模式，11000001 作为无符号是 193，作为有符号是 193-256 = -63。
+-63
+（同上）
+
+I19
+bitstring(Int8(5))   # 获取二进制字符串，返回 Int8(5) 的二进制字符串 "00000101"。
+"00000101"
+（基础，为后续位操作提供工具）
+
+I20
+parse(Int8, "11"; base=2), parse(Int8, "00001011"; base=2)   # 解析二进制字符串为整数，"11" 解析为 3，"00001011" 解析为 11。
+(3, 11)
+（基础）
+
+I21
+parse(Int8, "-00001011"; base=2)   # 解析带负号的二进制字符串，得到 -11。
+-11
+（基础）
+
+I26
+bitstring(11)   # 11 的 64 位二进制
+"0000000000000000000000000000000000000000000000000000000000001011"
+（基础）
+
+I27
+bitstring(-11)  # -11 的 64 位补码表示
+"1111111111111111111111111111111111111111111111111111111111110101"
+（基础）
+
+I29
+function tenthbitto1(x::Int32)
+    ret = bitstring(x)
+    parse(Int32, ret[1:9] * "1" * ret[11:end]; base=2)
+end
+tenthbitto1(Int32(100))   # 将 Int32 的第 10 位设为 1，结果为 4194404。
+4194404
+（对应 mockexams.ipynb 问题3(c) 的类似位操作练习，但考试中可能以其他形式出现）
+
+F2
+printbits(5.125)   # 打印 Float64 的二进制位，双精度表示：符号 0，指数 10000000001，尾数 010010...
+（彩色输出略）
+（基础）
+
+F3
+binarystring(5.125)   # 浮点数的数学形式
+"2^2 * (1.0100100000000000000000000000000000000000000000000000)_2"
+（基础）
+
+F4
+σ = 1023
+0b10000000001 - σ      # 从指数位减去偏移量 1023 得实际指数 2
+2
+（基础，为理解浮点数指数铺垫）
+
+F7
+σ = 127
+0b10000001 - σ          # 计算 Float32 实际指数，得实际指数 2
+2
+（基础）
+
+F10
+σ = 15
+0b10001 - σ             # 计算 Float16 实际指数，得实际指数 2
+2
+（直接对应 computerexam2324s.ipynb 问题4，要求返回 Float16 的指数）
+
+F11
+reinterpret(Float16, 0b1010101010101010)   # 通过指定位构造 Float16，得到约 -0.05206。
+Float16(-0.05206)
+（类似操作可用于构造特定位的浮点数，与 computerexam2324s.ipynb 问题4 的思路一致）
+
+F13
+σ, Q, S = 127, 8, 23
+εₘ = 2.0^(-S)
+printlnbits(Float32(2.0^(1-σ)))               # 最小正规格化 Float32
+printlnbits(Float32(2.0^(2^Q-2-σ) * (2-εₘ)))  # 最大规格化 Float32
+0 00000001 00000000000000000000000
+0 11111110 11111111111111111111111
+（基础，但可用于理解 floatmin 和 floatmax）
+
+F14
+mn = floatmin(Float32)
+printlnbits(mn)
+printlnbits(mn/2)         # 除以 2 得到次正规数
+0 00000001 00000000000000000000000
+0 00000000 10000000000000000000000
+（次正规数的概念直接对应 computerexam2122s.ipynb 问题1.1 判断次正规数）
+
+F15
+printlnbits(0.0)    # 正零
+printlnbits(-0.0)   # 负零
+0 00000000000 0000000000000000000000000000000000000000000000000000
+1 00000000000 0000000000000000000000000000000000000000000000000000
+（基础）
+
+F16
+reinterpret(Float16, 0b0000000000000001)   # 最小正次正规 Float16
+Float16(6.0e-8)
+（对应 computerexam2122s.ipynb 问题1.1 中次正规数的概念）
+
+F17
+printlnbits(Inf16)    # 正无穷
+printbits(-Inf16)     # 负无穷
+0 11111 0000000000
+1 11111 0000000000
+（基础）
+
+F18
+printbits(NaN16)      # NaN 的 Float16 位
+0 11111 1000000000
+（基础）
+
+F19
+1/0.0, 1/(-0.0), 0.0/0.0, Inf*0, Inf+5, (-1)*Inf, 1/Inf, 1/(-Inf), Inf-Inf, Inf==Inf, Inf==-Inf, NaN*0, NaN+5, 1/NaN, NaN==NaN, NaN!=NaN
+# 演示 IEEE 754 中无穷和 NaN 的运算规则。
+(Inf, -Inf, NaN, NaN, Inf, -Inf, 0.0, -0.0, NaN, true, false, NaN, NaN, NaN, false, true)
+（基础，了解特殊值运算）
+
+R1
+printlnbits(1/3)
+printbits(Float32(1/3))   # 将 1/3 从 Float64 舍入到 Float32（最近舍入）
+（彩色输出）
+（基础）
+
+R2
+printbits(Float32(1/3, RoundDown))   # 向下舍入
+（彩色输出）
+（舍入模式的使用直接对应 computerexam2324s.ipynb 问题5.2 的 cos_bound 中 setrounding 的应用，以及 mockexams.ipynb 问题5 的 divideby3）
+
+R3
+x = 1f0
+setrounding(Float32, RoundDown) do x/3 end,
+setrounding(Float32, RoundUp)   do x/3 end
+# 分别在下舍入和上舍入模式下计算 1f0/3
+(0.3333333f0, 0.33333334f0)
+（同上，直接体现 setrounding 的使用）
+
+R5
+big(1)/3   # 高精度 BigFloat
+0.3333333333333333333333333333333333333333333333333333333333333333333333333333348
+（高精度计算用于 computerexam2324s.ipynb 问题5.2 的 cos_bound 中求阶乘，以及 mockexams.ipynb 问题5 的边界计算）
+
+R8
+x = setprecision(4_000) do exp(big(1.0)) end
+length(string(x))   # 计算 e 的高精度近似值并检查长度
+1207
+（类似思想见于 computerexam2324s.ipynb 问题5.2 中用 BigFloat 获得高精度区间）
+
+IA2
+X = Interval(2.0, 3.3)
+2.5 in X, !(3.4 in X)   # 检查元素是否在区间内
+(true, true)
+（基础，区间算术的基础操作）
+
+IA4
+Interval(1.1) + Interval(1.2) + Interval(1.3)   # 区间加法
+Interval(3.5999999999999996, 3.6000000000000005)
+（区间加法直接对应 computerexam2324s.ipynb 问题5.2 中 Interval 的实现，也类似于 computerexam2223s.ipynb 问题2 的 Ball 算术）
+
+IA8
+-Interval(0.1,0.2)   # 区间取反
+Interval(-0.2, -0.1)
+（区间取反用于实现减法，见于 computerexam2324s.ipynb 问题5.2 的 - 运算）
+
+IA9
+Interval(0.1,0.2) - Interval(1.1,1.2)   # 区间减法
+Interval(-1.1, -0.9)
+（同上，区间减法）
+
+IA10
+Interval(-1.2, -1.1) * Interval(2.1, 3.1)   # 通用区间乘法
+Interval(-3.72, -2.31)   （预期结果）
+（通用区间乘法处理任意符号，对应 computerexam2324s.ipynb 问题5.2 中 * 的完整实现）
+
+IA11
+Interval(1.0,2.0)/(-3)   # 区间除以负整数
+Interval(-0.6666666666666667, -0.3333333333333333)
+（区间除法支持负数，见于 computerexam2324s.ipynb 问题5.2 中 / 的扩展）
+
+IA13
+E = exp_bound(Interval(1.0), 20)   # 用 20 项泰勒展开计算 e 的包含区间
+Interval(2.7182818284590406, 2.7182818284590495)
+（直接对应 computerexam2324s.ipynb 问题5.2 的 cos_bound，只是函数不同）
+
+IA14
+@test exp(big(1)) in E
+@test E.b - E.a ≤ 1E-13
+测试通过
+（测试包含关系，与 computerexam2324s.ipynb 问题5.2 的测试类似）
+
+IA16
+@test sin_t(1.0, 10) ≈ 0.8414709848078965   # sin 泰勒展开验证
+测试通过
+（对应 computerexam2324s.ipynb 问题5.1 的 cos_t，原理相同）
+
+M1
+ones(Int, 5, 6)           # 创建全 1 矩阵
+fill(1, 5, 6)
+[1 for i=1:5, j=1:6]
+均为 5×6 全 1 矩阵
+（基础矩阵创建）
+
+M3
+exp.(-(1:5))               # 广播生成向量 exp(-k)
+[0.367879, 0.135335, 0.0497871, 0.0183156, 0.00673795]
+（基础广播操作）
+
+M4
+function mul_cols(A, x)   # 按列访问的矩阵乘法
+    m,n = size(A)
+    c = zeros(m)
+    for j = 1:n, k = 1:m
+        c[k] += A[k, j] * x[j]
+    end
+    c
+end
+（基础矩阵乘法实现，为后续优化打基础）
+
+M6
+function ldiv(L::LowerTriangular, b)   # 前代法解下三角系统
+    n = size(L,1)
+    x = zeros(n)
+    for k = 1:n
+        r = b[k]
+        for j = 1:k-1
+            r -= L[k,j] * x[j]
+        end
+        x[k] = r / L[k,k]
+    end
+    x
+end
+（直接对应 computerexam2324s.ipynb 问题6 中 LowerTridiagonal 的 \ 求解，以及 computerexam2122s.ipynb 问题3.2 中的 * 操作，原理相同）
+
+M8
+function ldiv(U::UpperTriangular, b)   # 回代法解上三角系统
+    n = size(U,1)
+    x = zeros(n)
+    for k = n:-1:1
+        r = b[k]
+        for j = k+1:n
+            r -= U[k,j] * x[j]
+        end
+        x[k] = r / U[k,k]
+    end
+    x
+end
+（同上，上三角版本，对应 computerexam2324s.ipynb 问题6 的 \ 操作）
+
+M9
+struct UpperTridiagonal <: AbstractMatrix{Float64}
+    d; du; du2
+end
+function getindex(U::UpperTridiagonal, k::Int, j::Int)
+    if j == k+2; return U.du2[k]
+    elseif j == k+1; return U.du[k]
+    elseif j == k; return U.d[k]
+    else; return 0.0
+    end
+end
+function setindex!(U::UpperTridiagonal, v, k::Int, j::Int)
+    if j == k+2; U.du2[k] = v
+    elseif j == k+1; U.du[k] = v
+    elseif j == k; U.d[k] = v
+    else; error("off-band")
+    end
+end
+（自定义带状矩阵类型，与 computerexam2324s.ipynb 问题6 的 LowerTridiagonal 对称，直接对应其实现）
+
+M10
+function *(U::UpperTridiagonal, x::AbstractVector)   # O(n) 乘法
+    n = size(U,1)
+    b = zeros(n)
+    for j = 1:n, k = max(j-2,1):j
+        b[k] += U[k,j] * x[j]
+    end
+    b
+end
+（O(n) 乘法，对应 computerexam2324s.ipynb 问题6 中 LowerTridiagonal 的 * 操作，也是 mockexams.ipynb 问题6 的要求）
+
+M11
+function \(U::UpperTridiagonal, b::AbstractVector)   # O(n) 求解
+    n = size(U,1)
+    x = zeros(n)
+    for k = n:-1:1
+        r = b[k]
+        for j = k+1:min(n, k+2)
+            r -= U[k,j] * x[j]
+        end
+        x[k] = r / U[k,k]
+    end
+    x
+end
+（O(n) 求解，对应 computerexam2324s.ipynb 问题6 的 \ 操作）
+
+M12
+n = 1_000_000
+U = UpperTridiagonal(ones(n), fill(0.5,n-1), fill(0.1,n-2))
+x = ones(n)
+b = [fill(1.6,n-2); 1.5; 1]
+@test U*x ≈ b
+@test U\b ≈ x
+测试通过
+（测试用例，验证 O(n) 实现）
+
+
+
+
