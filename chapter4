@@ -1,0 +1,249 @@
+4.1
+  首先先加载包
+# LinearAlgebra 包含进行线性代数运算的例程
+using LinearAlgebra, Plots, Test
+  
+  接下来是一个例子
+1.计算微分方程u′′=−sinu
+using DifferentialEquations, LinearAlgebra, Plots
+u = solve(ODEProblem((u,_,x) -> [u[2], -sin(u[1])], [1,0], (0,10)))
+plot(u)
+
+2.插值多项式法，看看效果如何
+using LinearAlgebra, Plots
+
+f(x) = cos(10x)
+n = 5
+x_nodes = range(0, 1, length=n)                # 等距节点
+V = x_nodes .^ (0:n-1)'                         # 范德蒙矩阵
+f_nodes = f.(x_nodes)                           # 节点上的函数值
+c = V \ f_nodes                                  # 插值多项式系数
+
+p(x) = dot(c, x .^ (0:n-1))                     # 用系数计算多项式值
+
+# 验证插值条件
+@assert p.(x_nodes) ≈ V * c
+
+# 绘制比较
+x_plot = range(0, 1, length=1000)
+V_plot = x_plot .^ (0:n-1)'
+plot(x_plot, f.(x_plot), label="原函数", lw=2)
+plot!(x_plot, V_plot * c, label="插值多项式", lw=2, ls=:dash)
+scatter!(x_nodes, f_nodes, label="插值节点", ms=6)
+
+  
+3.多项式插值的 Runge 现象演示
+本代码演示用等距节点分别插值函数  
+\(f_4(x)=\frac{1}{4x^2+1}\) 和  
+\(f_{25}(x)=\frac{1}{25x^2+1}\)，并观察插值结果与原函数的偏差。  
+代码分为三部分，逐步分析 **Runge 现象** 以及数值精度的影响。
+
+## 准备环境
+```julia
+using LinearAlgebra, Plots
+# 第一部分：n = 50 的等距插值，初步观察
+n = 50
+𝐱 = range(-1, 1; length=n)          # 生成 50 个等距插值节点（Float64）
+𝐠 = range(-1, 1; length=1000)       # 用于绘图的密集网格（1000 个点）
+
+V = 𝐱 .^ (0:n-1)'                    # 范德蒙矩阵：每一列是节点 x 的幂次（0 到 n-1）
+V_g = 𝐠 .^ (0:n-1)'                  # 绘图网格对应的范德蒙矩阵（用于快速计算多项式值）
+
+f_4 = x -> 1/(4x^2 + 1)              # 函数 f_4(x)
+𝐜_4 = V \ f_4.(𝐱)                    # 解线性方程组得到 f_4 的插值多项式系数
+f_25 = x -> 1/(25x^2 + 1)            # 函数 f_25(x)
+𝐜_25 = V \ f_25.(𝐱)                  # 解线性方程组得到 f_25 的插值多项式系数
+
+plot(𝐠, V_g*𝐜_4; ylims=(-1,1))       # 绘制 f_4 的插值结果
+plot!(𝐠, V_g*𝐜_25)                   # 叠加绘制 f_25 的插值结果
+# 观察：两个函数在端点附近都有很大误差（Runge 现象）
+
+# 第二部分：n = 400 的等距插值，观察增加节点的影响
+n = 400
+𝐱 = range(-1, 1; length=n)           # 400 个等距节点
+
+V = 𝐱 .^ (0:n-1)'                    # 新的范德蒙矩阵
+V_g = 𝐠 .^ (0:n-1)'                  # 绘图网格矩阵保持不变
+f_4 = x -> 1/(4x^2 + 1)
+𝐜_4 = V \ f_4.(𝐱)                    # f_4 的插值系数
+f_25 = x -> 1/(25x^2 + 1)
+𝐜_25 = V \ f_25.(𝐱)                  # f_25 的插值系数
+
+plot(𝐠, V_g*𝐜_4; ylims=(-1,1))
+plot!(𝐠, V_g*𝐜_25)
+# 观察：f_4 的插值结果似乎收敛（振荡消失），但 f_25 的振荡反而更剧烈
+# 说明 M=4 时插值可能收敛，M=25 时数学上就不收敛（Runge 现象）
+
+# 第三部分：使用 BigFloat 高精度计算，排除数值误差的影响
+n = 400
+𝐱 = range(big(-1), 1; length=n)      # 生成 BigFloat 类型的节点（高精度）
+𝐠 = range(big(-1), 1; length=1000)   # 绘图网格也用 BigFloat
+
+V = 𝐱 .^ (0:n-1)'                    # 高精度范德蒙矩阵
+V_g = 𝐠 .^ (0:n-1)'                  # 高精度绘图矩阵
+
+f_4 = x -> 1/(4x^2 + 1)
+𝐜_4 = V \ f_4.(𝐱)                    # 高精度下求解 f_4 的插值系数
+f_25 = x -> 1/(25x^2 + 1)
+𝐜_25 = V \ f_25.(𝐱)                  # 高精度下求解 f_25 的插值系数
+
+plot(𝐠, V_g*𝐜_4; ylims=(-1,1))
+plot!(𝐠, V_g*𝐜_25)
+# 观察：高精度下 f_4 的插值几乎完全收敛（说明之前 n=400 的误差主要来自数值病态）
+# 但 f_25 的插值仍然剧烈振荡，且比之前更差，证明这是数学上的不收敛，而非数值问题
+# 这表明 f_25 的解析半径较小，等距节点插值根本不会收敛
+  
+
+4.插值型求积公式
+
+本代码实现了一个**插值型求积公式**：给定函数在节点上的取值，构造插值多项式，然后对该多项式在区间 \([0,1]\) 上精确积分，从而近似原函数的定积分。
+
+## 函数定义
+```julia
+using LinearAlgebra, Test
+
+"""
+    interpolatoryquadrature(f::AbstractVector, x::AbstractVector)
+
+计算插值型积分 ∫₀¹ p(x) dx，其中 p 是过点 (x[i], f[i]) 的插值多项式。
+返回积分近似值。
+
+# 参数
+- `f`：函数在节点上的取值向量，长度 n
+- `x`：节点坐标向量，长度 n（需互异）
+
+# 返回值
+- 插值多项式在 [0,1] 上的积分值
+"""
+function interpolatoryquadrature(f::AbstractVector, x::AbstractVector)
+    # 检查输入长度是否一致
+    if length(f) ≠ length(x)
+        error("向量 f 和 x 的长度必须相等")
+    end
+
+    n = length(f)                     # 节点个数
+    V = x .^ (0:n-1)'                  # 范德蒙矩阵，尺寸 n×n，第 j 列为 x.^(j-1)
+    c = V \ f                           # 解线性方程组，得到插值多项式系数 c[1..n]
+                                        # 多项式形式：p(x) = c[1] + c[2]x + ... + c[n]x^(n-1)
+
+    ret = 0.0
+    for k = 1:n
+        # ∫₀¹ x^(k-1) dx = 1/k
+        ret += c[k] / k                 # 累加每一项的积分
+    end
+    return ret
+end
+
+测试代码
+x = range(0, 1, length=10)             # 10 个等距节点
+f_vals = exp.(x)                        # 在这些节点上计算 exp(x)
+approx = interpolatoryquadrature(f_vals, x)
+exact = exp(1) - 1                       # ∫₀¹ e^x dx = e - 1
+
+println("近似积分值: $approx")
+println("精确积分值: $exact")
+println("绝对误差: $(abs(approx - exact))")
+
+# 单元测试（确保代码正确）
+@test approx ≈ exact
+
+5.插值积分
+# 定义一个辅助函数：若 x==0 则返回 NaN，否则返回 |x|
+nanabs(x) = x == 0 ? NaN : abs(x)
+
+# 加载绘图库
+using Plots
+
+# 节点数从 2 到 100
+ns = 2:100
+
+# 计算函数 exp(x) 的积分误差（每个 n 对应一个误差值）
+errs = [(x = range(0,1,n);                     # 生成 n 个等距节点
+         nanabs(interpolatoryquadrature(exp.(x), x) - (exp(1)-1))) 
+        for n=ns]
+
+# 绘制 exp(x) 的误差曲线，纵坐标为对数坐标
+plot(ns, errs; yscale=:log10)   # 误差呈指数衰减
+
+# 计算函数 1/(25x^2+1) 的积分误差（双精度）
+errs = [(x = range(0,1,n); 
+         nanabs(interpolatoryquadrature(1 ./ (25x.^2 .+ 1), x) - atan(5)/5)) 
+        for n=ns]
+plot!(ns, errs; yscale=:log10)  # 叠加到同一图，误差起初下降但很快停滞
+
+# 使用高精度 BigFloat 重新计算第二个函数的误差
+errs = [(x = range(0,big(1),n); 
+         nanabs(interpolatoryquadrature(1 ./ (25x.^2 .+ 1), x) - atan(big(5))/5)) 
+        for n=ns]
+plot!(ns, errs; yscale=:log10)  # 叠加，误差可继续下降
+
+
+6.节点分布对插值型求积公式精度的影响。它将节点从等距改为余弦分布
+
+x = (cos.(range(0, π, n)) .+ 1)/2#节点选择
+
+  #测试1
+  errs = [(x = (cos.(range(0,π,n)) .+ 1)/2; 
+         nanabs(interpolatoryquadrature(exp.(x), x) - (exp(1)-1))) 
+        for n=ns]
+plot(ns, errs; yscale=:log10)
+
+  #测试2
+errs = [(x = (cos.(range(0,π,n)) .+ 1)/2; 
+         nanabs(interpolatoryquadrature(1 ./ (25x.^2 .+ 1), x) - atan(5)/5)) 
+        for n=ns]
+plot!(ns, errs; yscale=:log10)
+
+  #测试3 bigfloat
+errs = [(x = (cos.(range(0,big(π),n)) .+ 1)/2; 
+         nanabs(interpolatoryquadrature(1 ./ (25x.^2 .+ 1), x) - atan(big(5))/5)) 
+        for n=ns]
+plot!(ns, errs; yscale=:log10)
+
+7.插值型求积公式的权重公式
+
+  function interpolatoryweights(x::AbstractVector)
+    n = length(x)
+    # 构造范德蒙矩阵 V，其中第 j 列为 x.^(j-1)
+    V = x .^ (0:n-1)'   # 利用广播，x 是列向量，指数是行向量，得到 n×n 矩阵
+    # 求解线性系统 V' * w = [1, 1/2, ..., 1/n]
+    # 注意右端项 1 ./ (1:n) 对应 1, 1/2, ..., 1/n
+    V' \ (1 ./ (1:n))
+end
+#测试
+@test interpolatoryweights([0,1/4,1]) ≈ [-1/6, 8/9, 5/18]
+
+8.看看扰动之后的拟合效果如何，本来是一个普通的二次函数，在取样本点的时候加一点扰动，看看结果怎么样
+
+m, n = 100, 3  # 设置样本点数量 m = 100，多项式阶数为 2（需要 n = 3 个系数）
+𝐱 = range(0, 1; length=m)  # 生成从 0 到 1 的 100 个等距点作为自变量
+# 生成带噪声的二次函数样本：真实模型为 2 + x + 2x²，加上标准差为 0.1 的正态噪声
+𝐟 = 2 .+ 𝐱 .+ 2𝐱.^2 .+ 0.1 .* randn.()  # 广播运算，得到观测值向量
+# 构造 100×3 的范德蒙矩阵 V，每列分别为 x^0, x^1, x^2
+V = 𝐱 .^ (0:2)'  # (0:2)' 是行向量，利用广播生成矩阵，等价于 [ones(m)  𝐱  𝐱.^2]
+𝐜 = V \ 𝐟  # 用反斜杠运算符求解最小二乘问题，得到多项式系数的估计值（应接近 [2, 1, 2]）
+
+#测试 
+𝐠 =range(0, 1; length=1000)
+p = x -> 𝐜[1] + 𝐜[2]x + 𝐜[3]x^2
+scatter(𝐱, 𝐟; label="samples", legend=:bottomright)
+plot!(𝐠, p.(𝐠); label="quadratic")
+
+9.使用最小二乘法逼近函数 1/(10x^2 + 1) 和 1/(25x^2 + 1)
+
+# 使用最小二乘法逼近函数 1/(4x^2+1) 和 1/(25x^2+1)
+n = 50                      # 使用基函数 [1, x, …, x^(49)]，即最高49次的多项式
+𝐱 = range(-1, 1; length=500) # 在[-1,1]上均匀取500个点作为最小二乘的样本点
+𝐠 = range(-1, 1; length=2000) # 在[-1,1]上均匀取2000个点用于绘制拟合曲线
+V = 𝐱 .^ (0:n-1)'           # 构造500×50的范德蒙矩阵，每列对应样本点的不同幂次
+V_g = 𝐠 .^ (0:n-1)'         # 构造2000×50的范德蒙矩阵，用于计算绘图点上的多项式值
+f_4 = x -> 1/(4x^2 + 1)     # 定义第一个目标函数 f_4(x) = 1/(4x^2+1)
+𝐜_4 = V \ f_4.(𝐱)            # 求解最小二乘问题，得到拟合 f_4 的多项式系数
+f_25 = x -> 1/(25x^2 + 1)   # 定义第二个目标函数 f_25(x) = 1/(25x^2+1)
+𝐜_25 = V \ f_25.(𝐱)          # 求解最小二乘问题，得到拟合 f_25 的多项式系数
+plot(𝐠, V_g*𝐜_4; ylims=(-1,1))   # 绘制第一个函数的拟合曲线
+plot!(𝐠, V_g*𝐜_25)                # 在同一图中叠加第二个函数的拟合曲线
+# 结果：两个近似看起来都在收敛。
+# 尽管这两个函数的泰勒级数收敛半径都小于区间[-1,1]的长度，
+# 但最小二乘法依然能够给出良好的拟合。
+  
